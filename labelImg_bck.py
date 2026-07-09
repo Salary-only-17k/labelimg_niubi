@@ -8,7 +8,6 @@ import platform
 import shutil
 import sys
 sys.path.append('.')
-
 import webbrowser as wb
 from functools import partial
 
@@ -50,14 +49,6 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-
-# try:
-#     from ultralytics import YOLO
-# except ImportError:
-#     print("请先安装 ultralytics: pip install ultralytics")
-#     # QMessageBox.warning(self, u"警告", u"请先安装 ultralytics: pip install ultralytics")
-
-
 
 __appname__ = 'labelImg'
 

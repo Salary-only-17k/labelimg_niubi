@@ -1,0 +1,12 @@
+torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+numpy
+pyqt5
+sip
+lxml
+ujson
+matplotlib
+pillow
+six
+pyyaml
+pandas
+scipy
