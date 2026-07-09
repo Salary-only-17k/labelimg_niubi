@@ -1,3 +1,18 @@
+# labelimg_nb
+# 环境配置
+需要下载ultralytics，放到项目根目录中。   
+```
+https://github.com/ultralytics/ultralytics/tree/main/ultralytics
+```
+其他环境安装
+```
+pip install requirements.txt
+```
+# 快速开始
+```
+python labelImg.txt
+```
+
 # 功能添加
 
 ## 1  预标功能
