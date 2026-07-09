@@ -58,6 +58,7 @@ class Canvas(QWidget):
         self.h_vertex = None
         self._painter = QPainter()
         self._cursor = CURSOR_DEFAULT
+        self.guideline_denom = 0  # 0=none, 3=1/3, 4=1/4, 5=1/5
         # Menus:
         self.menus = (QMenu(), QMenu())
         # Set widget options.
@@ -515,6 +516,14 @@ class Canvas(QWidget):
             painter.end()
 
         p.drawPixmap(0, 0, temp)
+
+        if self.guideline_denom > 0 and self.pixmap and not self.pixmap.isNull():
+            pen = QPen(QColor(0, 255, 0), 2 / self.scale)
+            pen.setStyle(Qt.DashLine)
+            p.setPen(pen)
+            y = self.pixmap.height() // self.guideline_denom
+            p.drawLine(0, y, self.pixmap.width(), y)
+
         Shape.scale = self.scale
         Shape.label_font_size = self.label_font_size
         for shape in self.shapes:
