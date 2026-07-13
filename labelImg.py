@@ -59,7 +59,7 @@ from libs.hashableQListWidgetItem import HashableQListWidgetItem
 
 
 
-__appname__ = 'labelImg'
+__appname__ = 'labelImg_niubi'
 
 
 class PreAnnotateDialog(QDialog):
