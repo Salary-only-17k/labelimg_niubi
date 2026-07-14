@@ -27,6 +27,7 @@ device = cpu
 ## 2 找特征相似的目标
 
 需要安装ultralytics，以及预训练模型yoloe。
+配置文件在data/yoloe_models.conf
 
 首先选中一个框，然后点击按钮【yoloe 相似标注】
 
