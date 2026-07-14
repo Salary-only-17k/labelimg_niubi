@@ -15,7 +15,7 @@
 配置文件在data/pre_label_models.conf
 
 ```
-model = yolo26s_last_dlzc.pt
+model = yolo26s_last.pt
 # 置信度阈值，低于此值的检测结果将被过滤
 conf = 0.5
 # 输入图像尺寸（像素），可以是单个值（正方形）或宽,高
