@@ -17,6 +17,7 @@ class ToolBar(QToolBar):
         layout.setContentsMargins(*m)
         self.setContentsMargins(*m)
         self.setWindowFlags(self.windowFlags() | Qt.FramelessWindowHint)
+        self.setIconSize(QSize(24, 24))
 
     def addAction(self, action):
         if isinstance(action, QWidgetAction):
@@ -29,7 +30,7 @@ class ToolBar(QToolBar):
 
 class ToolButton(QToolButton):
     """ToolBar companion class which ensures all buttons have the same size."""
-    minSize = (60, 60)
+    minSize = (32, 32)
 
     def minimumSizeHint(self):
         ms = super(ToolButton, self).minimumSizeHint()

@@ -116,8 +116,9 @@ class Canvas(QWidget):
         # Update coordinates in status bar if image is opened
         window = self.parent().window()
         if window.file_path is not None:
-            self.parent().window().label_coordinates.setText(
-                'X: %d; Y: %d' % (pos.x(), pos.y()))
+            prefix = getattr(window, 'counter_prefix', '')
+            window.label_coordinates.setText(
+                prefix + 'X: %d; Y: %d' % (pos.x(), pos.y()))
 
         # Polygon drawing.
         if self.drawing():
@@ -126,8 +127,9 @@ class Canvas(QWidget):
                 # Display annotation width and height while drawing
                 current_width = abs(self.current[0].x() - pos.x())
                 current_height = abs(self.current[0].y() - pos.y())
+                prefix = getattr(self.parent().window(), 'counter_prefix', '')
                 self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                        prefix + 'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
 
                 color = self.drawing_line_color
                 if self.out_of_pixmap(pos):
@@ -188,8 +190,9 @@ class Canvas(QWidget):
                 point3 = self.h_shape[3]
                 current_width = abs(point1.x() - point3.x())
                 current_height = abs(point1.y() - point3.y())
+                prefix = getattr(self.parent().window(), 'counter_prefix', '')
                 self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                        prefix + 'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
             elif self.selected_shape and self.prev_point:
                 self.override_cursor(CURSOR_MOVE)
                 self.bounded_move_shape(self.selected_shape, pos)
@@ -201,8 +204,9 @@ class Canvas(QWidget):
                 point3 = self.selected_shape[3]
                 current_width = abs(point1.x() - point3.x())
                 current_height = abs(point1.y() - point3.y())
+                prefix = getattr(self.parent().window(), 'counter_prefix', '')
                 self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                        prefix + 'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
             else:
                 # pan
                 delta = ev.pos() - self.pan_initial_pos
@@ -246,8 +250,9 @@ class Canvas(QWidget):
                 point3 = self.h_shape[3]
                 current_width = abs(point1.x() - point3.x())
                 current_height = abs(point1.y() - point3.y())
+                prefix = getattr(self.parent().window(), 'counter_prefix', '')
                 self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                        prefix + 'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
                 break
         else:  # Nothing found, clear highlights, reset state.
             if self.h_shape:
