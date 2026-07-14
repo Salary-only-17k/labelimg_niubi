@@ -37,7 +37,6 @@ from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR
 from libs.stringBundle import StringBundle
 from libs.canvas import Canvas
 from libs.zoomWidget import ZoomWidget
-from libs.lightWidget import LightWidget
 from libs.labelDialog import LabelDialog
 from libs.colorDialog import ColorDialog
 from libs.labelFile import LabelFile, LabelFileError, LabelFileFormat
@@ -59,7 +58,7 @@ from libs.hashableQListWidgetItem import HashableQListWidgetItem
 
 
 
-__appname__ = 'labelImg_niubi'
+__appname__ = 'labelImg_Clong'
 
 
 class PreAnnotateDialog(QDialog):
@@ -287,12 +286,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.file_dock.setWidget(file_list_container)
 
         self.zoom_widget = ZoomWidget()
-        self.light_widget = LightWidget(get_str('lightWidgetTitle'))
         self.color_dialog = ColorDialog(parent=self)
 
         self.canvas = Canvas(parent=self)
         self.canvas.zoomRequest.connect(self.zoom_request)
-        self.canvas.lightRequest.connect(self.light_request)
         self.canvas.set_drawing_shape_to_square(settings.get(SETTING_DRAW_SQUARE, False))
 
         scroll = QScrollArea()
@@ -489,26 +486,6 @@ class MainWindow(QMainWindow, WindowMixin):
             self.MANUAL_ZOOM: lambda: 1,
         }
 
-        light = QWidgetAction(self)
-        light.setDefaultWidget(self.light_widget)
-        self.light_widget.setWhatsThis(
-            u"Brighten or darken current image. Also accessible with"
-            " %s and %s from the canvas." % (format_shortcut("Ctrl+Shift+[-+]"),
-                                             format_shortcut("Ctrl+Shift+Wheel")))
-        self.light_widget.setEnabled(False)
-
-        light_brighten = action(get_str('lightbrighten'), partial(self.add_light, 10),
-                                'Ctrl+Shift++', 'light_lighten', get_str('lightbrightenDetail'), enabled=False)
-        light_darken = action(get_str('lightdarken'), partial(self.add_light, -10),
-                              'Ctrl+Shift+-', 'light_darken', get_str('lightdarkenDetail'), enabled=False)
-        light_org = action(get_str('lightreset'), partial(self.set_light, 50),
-                           'Ctrl+Shift+=', 'light_reset', get_str('lightresetDetail'), checkable=True, enabled=False)
-        light_org.setChecked(True)
-
-        # Group light controls into a list for easier toggling.
-        light_actions = (self.light_widget, light_brighten,
-                         light_darken, light_org)
-
         edit = action(get_str('editLabel'), self.edit_label,
                       'Ctrl+E', 'edit', get_str('editLabelDetail'),
                       enabled=False)
@@ -547,9 +524,7 @@ class MainWindow(QMainWindow, WindowMixin):
                               zoom=zoom, zoomIn=zoom_in, zoomOut=zoom_out, zoomOrg=zoom_org,
                               fitWindow=fit_window, fitWidth=fit_width,
                               zoomActions=zoom_actions,
-                              lightBrighten=light_brighten, lightDarken=light_darken, lightOrg=light_org,
-                              lightActions=light_actions,
-                              fileMenuActions=(
+                               fileMenuActions=(
                                   open, open_dir, save, save_as, close, reset_all, quit),
                               beginner=(), advanced=(),
                               editMenu=(edit, copy, delete,
@@ -596,8 +571,7 @@ class MainWindow(QMainWindow, WindowMixin):
             labels, advanced_mode, None,
             hide_all, show_all, None,
             zoom_in, zoom_out, zoom_org, None,
-            fit_window, fit_width, None,
-            light_brighten, light_darken, light_org))
+            fit_window, fit_width))
 
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
@@ -611,8 +585,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.beginner = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
             pre_annotate, yoloe_auto, delete_image, None,
-            zoom_in, zoom, zoom_out, fit_window, fit_width, None,
-            light_brighten, light, light_darken, light_org)
+            zoom_in, zoom, zoom_out, fit_window, fit_width)
 
         self.actions.advanced = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, save, save_format, None,
@@ -690,13 +663,17 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Callbacks:
         self.zoom_widget.valueChanged.connect(self.paint_canvas)
-        self.light_widget.valueChanged.connect(self.paint_canvas)
 
         self.populate_mode_actions()
 
         # Display cursor coordinates at the right of status bar
         self.label_coordinates = QLabel('')
         self.statusBar().addPermanentWidget(self.label_coordinates)
+
+        self.label_coordinates.setCursor(QCursor(Qt.PointingHandCursor))
+        self.label_coordinates.setToolTip(u"点击跳转到指定图像")
+        self.label_coordinates.mousePressEvent = lambda e: self.jump_to_image()
+        self.counter_prefix = ''
 
         # Open Dir if default file
         if self.file_path and os.path.isdir(self.file_path):
@@ -791,8 +768,6 @@ class MainWindow(QMainWindow, WindowMixin):
     def toggle_actions(self, value=True):
         """Enable/Disable widgets which depend on an opened image."""
         for z in self.actions.zoomActions:
-            z.setEnabled(value)
-        for z in self.actions.lightActions:
             z.setEnabled(value)
         for action in self.actions.onLoadActive:
             action.setEnabled(value)
@@ -1225,9 +1200,6 @@ class MainWindow(QMainWindow, WindowMixin):
         h_bar.setValue(new_h_bar_value)
         v_bar.setValue(new_v_bar_value)
 
-    def light_request(self, delta):
-        self.add_light(5*delta // (8 * 15))
-
     def set_fit_window(self, value=True):
         if value:
             self.actions.fitWidth.setChecked(False)
@@ -1239,15 +1211,6 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.fitWindow.setChecked(False)
         self.zoom_mode = self.FIT_WIDTH if value else self.MANUAL_ZOOM
         self.adjust_scale()
-
-    def set_light(self, value):
-        self.actions.lightOrg.setChecked(int(value) == 50)
-        # Arithmetic on scaling factor often results in float
-        # Convert to int to avoid type errors
-        self.light_widget.setValue(int(value))
-
-    def add_light(self, increment=10):
-        self.set_light(self.light_widget.value() + increment)
 
     def toggle_polygons(self, value):
         for item, shape in self.items_to_shapes.items():
@@ -1326,6 +1289,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
             counter = self.counter_str()
             self.setWindowTitle(__appname__ + ' ' + file_path + ' ' + counter)
+            self.label_coordinates.setText(self.counter_prefix)
 
             # Default : select last item if there is at least one item
             if self.label_list.count():
@@ -1337,9 +1301,7 @@ class MainWindow(QMainWindow, WindowMixin):
         return False
 
     def counter_str(self):
-        """
-        Converts image counter to string representation.
-        """
+        self.counter_prefix = '{} / {}  |  '.format(self.cur_img_idx + 1, self.img_count)
         return '[{} / {}]'.format(self.cur_img_idx + 1, self.img_count)
 
     def show_bounding_box_from_annotation_file(self, file_path):
@@ -1381,7 +1343,6 @@ class MainWindow(QMainWindow, WindowMixin):
     def paint_canvas(self):
         assert not self.image.isNull(), "cannot paint null image"
         self.canvas.scale = 0.01 * self.zoom_widget.value()
-        self.canvas.overlay_color = self.light_widget.color()
         self.canvas.label_font_size = int(0.02 * max(self.image.width(), self.image.height()))
         self.canvas.adjustSize()
         self.canvas.update()
@@ -1693,6 +1654,17 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.cur_img_idx - 1 >= 0:
             self.cur_img_idx -= 1
             filename = self.m_img_list[self.cur_img_idx]
+            if filename:
+                self.load_file(filename)
+
+    def jump_to_image(self):
+        if self.img_count <= 0:
+            return
+        num, ok = QInputDialog.getInt(self, u"跳转", u"输入图像编号 (1 ~ %d):" % self.img_count, self.cur_img_idx + 1, 1, self.img_count)
+        if ok:
+            idx = num - 1
+            self.cur_img_idx = idx
+            filename = self.m_img_list[idx]
             if filename:
                 self.load_file(filename)
 

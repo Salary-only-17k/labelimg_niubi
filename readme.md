@@ -1,18 +1,3 @@
-# labelimg_nb
-# 环境配置
-需要下载ultralytics，放到项目根目录中。   
-```
-https://github.com/ultralytics/ultralytics/tree/main/ultralytics
-```
-其他环境安装
-```
-pip install requirements.txt
-```
-# 快速开始
-```
-python labelImg.txt
-```
-
 # 功能添加
 
 ## 1  预标功能
@@ -21,13 +6,13 @@ python labelImg.txt
 
 用预训练模型对图像做预标注
 
-![1783592902957](image/readme/1783592902957.png)
+![1784005676203](image/readme/1784005676203.png)
 
 然后会弹出一个选择预标注范围的框，选择范围，选择类别，就进行预标注目标。
 
-![1783592933485](image/readme/1783592933485.png)
+![1784005700343](image/readme/1784005700343.png)
 
-配置文件在data/pre_label_models.conf 
+配置文件在data/pre_label_models.conf
 
 ```
 model = yolo26s_last_dlzc.pt
@@ -39,20 +24,21 @@ imgsz = 640
 device = cpu
 ```
 
-
 ## 2 找特征相似的目标
 
 需要安装ultralytics，以及预训练模型yoloe。
 
 首先选中一个框，然后点击按钮【yoloe 相似标注】
 
-![1783589521345](image/readme/1783589521345.png)
+![1784005618392](image/readme/1784005618392.png)
 
 然后会弹出一个选择预标注范围的框，选择范围，就进行找相似度目标，并标注。
 
-![1783589557090](image/readme/1783589557090.png)
+![1784005638731](image/readme/1784005638731.png)
 
 ## 3 调节图像参数
+
+增强图像视觉效果，方便标注
 
 - 亮度调节
 - 饱和度调节
@@ -60,16 +46,24 @@ device = cpu
 - 灰度化调节
 - 复位键
 
-![1783333492277](image/readme/1783333492277.png)
+![1784005544069](image/readme/1784005544069.png)
 
 ## 4 删除图像
 
 点击删除图像按钮删除当前图像，然后位置退回到下一个图像位置。
 
-![1783505555037](image/readme/1783505555037.png)
+![1784005519989](image/readme/1784005519989.png)
 
 ## 5 标准线
 
 当我们需要关注某个范围区域的东西时候，可以使用这个虚线，给我们自己提示。
 
-![1783593102368](image/readme/1783593102368.png)
+![1784005481757](image/readme/1784005481757.png)
+
+![1784005498892](image/readme/1784005498892.png)
+
+## 6 跳到某个位置
+
+![1784005427164](image/readme/1784005427164.png)
+
+![1784005453177](image/readme/1784005453177.png)
