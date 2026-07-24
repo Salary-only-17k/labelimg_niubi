@@ -78,3 +78,5 @@ device = cpu
 python labelimg.py /path/to/images_dir   /path/to/classes.txt
 
 ```
+## 大模型评估标注意见
+添加了大模型评估标注框的意见，是否需要标，以及是否符合类别标准。
