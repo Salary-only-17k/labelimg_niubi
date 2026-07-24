@@ -67,3 +67,14 @@ device = cpu
 ![1784005427164](image/readme/1784005427164.png)
 
 ![1784005453177](image/readme/1784005453177.png)
+
+## 7 点位图像功能
+在这个位置，输入文件的名称，不带拓展名字，回车会定位图像位置。  
+![12341231231](image/readme/12341231231.jpg)
+
+## 8 定位历史标注位置
+打开标注图像目录，会自动定位到上次标注的位置。
+```bash
+python labelimg.py /path/to/images_dir   /path/to/classes.txt
+
+```
