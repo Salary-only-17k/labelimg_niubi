@@ -15,7 +15,7 @@
 配置文件在data/pre_label_models.conf
 
 ```
-model = yolo26s_last.pt
+model = yolo26s_last_dlzc.pt
 # 置信度阈值，低于此值的检测结果将被过滤
 conf = 0.5
 # 输入图像尺寸（像素），可以是单个值（正方形）或宽,高
@@ -27,7 +27,6 @@ device = cpu
 ## 2 找特征相似的目标
 
 需要安装ultralytics，以及预训练模型yoloe。
-配置文件在data/yoloe_models.conf
 
 首先选中一个框，然后点击按钮【yoloe 相似标注】
 
@@ -68,3 +67,14 @@ device = cpu
 ![1784005427164](image/readme/1784005427164.png)
 
 ![1784005453177](image/readme/1784005453177.png)
+
+## 7 点位图像功能
+在这个位置，输入文件的名称，不带拓展名字，回车会定位图像位置。  
+![12341231231](image/readme/12341231231.jpg)
+
+## 8 定位历史标注位置
+打开标注图像目录，会自动定位到上次标注的位置。
+```bash
+python labelimg.py /path/to/images_dir   /path/to/classes.txt
+
+```

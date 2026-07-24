@@ -9,6 +9,8 @@ import shutil
 import sys
 sys.path.append('.')
 
+import io
+import tempfile
 import webbrowser as wb
 from functools import partial
 
@@ -32,11 +34,12 @@ from libs.default_label_combobox import DefaultLabelComboBox
 from libs.resources import *
 from libs.constants import *
 from libs.utils import *
+from libs.stringBundle import StringBundle
 from libs.settings import Settings
 from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR
-from libs.stringBundle import StringBundle
 from libs.canvas import Canvas
 from libs.zoomWidget import ZoomWidget
+from libs.llm_client import init_llm, make_multimodal_message, load_sys_prompt, image_data_to_base64, get_label_cn
 from libs.labelDialog import LabelDialog
 from libs.colorDialog import ColorDialog
 from libs.labelFile import LabelFile, LabelFileError, LabelFileFormat
@@ -276,8 +279,14 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.file_list_widget = QListWidget()
         self.file_list_widget.itemDoubleClicked.connect(self.file_item_double_clicked)
+        self.file_search_box = QLineEdit()
+        self.file_search_box.setPlaceholderText(u"搜索图像名称...")
+        self.file_search_box.setClearButtonEnabled(True)
+        self.file_search_box.returnPressed.connect(self.locate_image_by_name)
+        self.file_search_box.textChanged.connect(self.filter_file_list)
         file_list_layout = QVBoxLayout()
         file_list_layout.setContentsMargins(0, 0, 0, 0)
+        file_list_layout.addWidget(self.file_search_box)
         file_list_layout.addWidget(self.file_list_widget)
         file_list_container = QWidget()
         file_list_container.setLayout(file_list_layout)
@@ -385,7 +394,11 @@ class MainWindow(QMainWindow, WindowMixin):
 
         pre_annotate = action(u'预标注标签', self.pre_annotate, 'Ctrl+Shift+X', 'labels', u'使用YOLO模型对所有图像进行自动标注')
 
-        yoloe_auto = action(u'YOLOE 相似标注', self.yoloe_auto_annotate, 'Ctrl+Shift+E', 'objects', u'基于当前框作为视觉提示，使用YOLOE对所有图像自动标注相似目标')
+        yoloe_auto = action(u'YOLOE 相似标注', self.yoloe_auto_annotate, 'Ctrl+Shift+E', 'yoloe', u'基于当前框作为视觉提示，使用YOLOE对所有图像自动标注相似目标')
+
+        llm_suggest = action(u'大模型标注建议', self.llm_suggest_annotations, 'Ctrl+Shift+L', 'llm', u'将当前图像发送给大模型获取标注建议')
+
+        llm_validate_shape = action(u'框体大模型校验', self.llm_validate_selected_shape, None, 'validate', u'将所选目标框发送给大模型校验标注正确性')
 
         open_next_image = action(get_str('nextImg'), self.open_next_image,
                                  'd', 'next', get_str('nextImgDetail'))
@@ -576,21 +589,23 @@ class MainWindow(QMainWindow, WindowMixin):
         self.menus.file.aboutToShow.connect(self.update_file_menu)
 
         # Custom context menu for the canvas widget:
-        add_actions(self.canvas.menus[0], self.actions.beginnerContext)
+        add_actions(self.canvas.menus[0], self.actions.beginnerContext + (None, llm_validate_shape))
         add_actions(self.canvas.menus[1], (
             action('&Copy here', self.copy_shape),
-            action('&Move here', self.move_shape)))
+            action('&Move here', self.move_shape),
+            None,
+            llm_validate_shape))
 
         self.tools = self.toolbar('Tools')
         self.actions.beginner = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
-            pre_annotate, yoloe_auto, delete_image, None,
+            pre_annotate, yoloe_auto, llm_suggest, delete_image, None,
             zoom_in, zoom, zoom_out, fit_window, fit_width)
 
         self.actions.advanced = (
             open, open_dir, change_save_dir, open_next_image, open_prev_image, save, save_format, None,
             create_mode, edit_mode, None,
-            pre_annotate, yoloe_auto, delete_image, None,
+            pre_annotate, yoloe_auto, llm_suggest, delete_image, None,
             hide_all, show_all)
 
         self.statusBar().showMessage('%s started.' % __appname__)
@@ -906,6 +921,66 @@ class MainWindow(QMainWindow, WindowMixin):
         filename = self.m_img_list[self.cur_img_idx]
         if filename:
             self.load_file(filename)
+
+    def filter_file_list(self, text):
+        self.file_list_widget.clear()
+        if not text:
+            for imgPath in self.m_img_list:
+                self.file_list_widget.addItem(QListWidgetItem(imgPath))
+        else:
+            for imgPath in self.m_img_list:
+                basename = os.path.splitext(os.path.basename(imgPath))[0]
+                if text.lower() in basename.lower():
+                    self.file_list_widget.addItem(QListWidgetItem(imgPath))
+
+    def locate_image_by_name(self):
+        if self.img_count <= 0:
+            return
+        text = self.file_search_box.text().strip()
+        if not text:
+            return
+        for idx, imgPath in enumerate(self.m_img_list):
+            basename = os.path.splitext(os.path.basename(imgPath))[0]
+            if text.lower() in basename.lower():
+                self.cur_img_idx = idx
+                self.load_file(imgPath)
+                for i in range(self.file_list_widget.count()):
+                    item = self.file_list_widget.item(i)
+                    if item.text() == imgPath:
+                        self.file_list_widget.setCurrentItem(item)
+                        self.file_list_widget.scrollToItem(item)
+                        break
+                return
+
+    def _get_last_viewed_path(self):
+        if self.file_path:
+            return os.path.join(os.path.dirname(os.path.abspath(self.file_path)), '.last_viewed.txt')
+        elif self.dir_name:
+            return os.path.join(os.path.abspath(self.dir_name), '.last_viewed.txt')
+        return None
+
+    def _save_last_viewed(self):
+        path = self._get_last_viewed_path()
+        if path and self.file_path:
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(os.path.basename(self.file_path))
+            except Exception:
+                pass
+
+    def _load_last_viewed(self):
+        path = self._get_last_viewed_path()
+        if path and os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    basename = f.read().strip()
+                if basename:
+                    for imgPath in self.m_img_list:
+                        if os.path.basename(imgPath) == basename:
+                            return imgPath
+            except Exception:
+                pass
+        return None
 
     # Add chris
     def button_state(self, item=None):
@@ -1234,7 +1309,8 @@ class MainWindow(QMainWindow, WindowMixin):
             if unicode_file_path in self.m_img_list:
                 index = self.m_img_list.index(unicode_file_path)
                 file_widget_item = self.file_list_widget.item(index)
-                file_widget_item.setSelected(True)
+                if file_widget_item:
+                    file_widget_item.setSelected(True)
             else:
                 self.file_list_widget.clear()
                 self.m_img_list.clear()
@@ -1297,6 +1373,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.label_list.item(self.label_list.count() - 1).setSelected(True)
 
             self.canvas.setFocus(True)
+            self._save_last_viewed()
             return True
         return False
 
@@ -1550,6 +1627,11 @@ class MainWindow(QMainWindow, WindowMixin):
                                      ('Change saved folder', self.default_save_dir))
         self.statusBar().show()
 
+        last_viewed = self._load_last_viewed()
+        if last_viewed and last_viewed in self.m_img_list:
+            self.cur_img_idx = self.m_img_list.index(last_viewed)
+            self.load_file(last_viewed)
+
 
     def open_annotation_dialog(self, _value=False):
         if self.file_path is None:
@@ -1606,13 +1688,19 @@ class MainWindow(QMainWindow, WindowMixin):
         self.last_open_dir = dir_path
         self.dir_name = dir_path
         self.file_path = None
+        self.file_search_box.clear()
         self.file_list_widget.clear()
         self.m_img_list = self.scan_all_images(dir_path)
         self.img_count = len(self.m_img_list)
-        self.open_next_image()
         for imgPath in self.m_img_list:
             item = QListWidgetItem(imgPath)
             self.file_list_widget.addItem(item)
+        last_viewed = self._load_last_viewed()
+        if last_viewed and last_viewed in self.m_img_list:
+            self.cur_img_idx = self.m_img_list.index(last_viewed)
+            self.load_file(last_viewed)
+        elif self.img_count > 0:
+            self.open_next_image()
 
     def verify_image(self, _value=False):
         # Proceeding next image without dialog if having any label
@@ -1776,14 +1864,21 @@ class MainWindow(QMainWindow, WindowMixin):
 
         delete_path = self.file_path
         idx = self.cur_img_idx
+        stem = os.path.splitext(os.path.basename(delete_path))[0]
 
-        # delete annotation file(s)
+        # delete annotation file(s) from save dir
         if self.default_save_dir:
-            stem = os.path.splitext(os.path.basename(delete_path))[0]
             for ext in ['.txt', '.xml', '.json']:
                 ann_path = os.path.join(self.default_save_dir, stem + ext)
                 if os.path.exists(ann_path):
                     os.remove(ann_path)
+
+        # delete annotation file(s) from image dir
+        image_dir = os.path.dirname(delete_path)
+        for ext in ['.txt', '.xml', '.json']:
+            ann_path = os.path.join(image_dir, stem + ext)
+            if os.path.exists(ann_path):
+                os.remove(ann_path)
 
         # delete image file
         if os.path.exists(delete_path):
@@ -1928,6 +2023,97 @@ class MainWindow(QMainWindow, WindowMixin):
             prev_file_path = self.m_img_list[current_index - 1]
             self.show_bounding_box_from_annotation_file(prev_file_path)
             self.save_file()
+
+    def _current_pixmap_to_base64(self) -> str:
+        buf = io.BytesIO()
+        pixmap = self.canvas.pixmap
+        if pixmap is None or pixmap.isNull():
+            return ''
+        pixmap.save(buf, "JPEG", quality=85)
+        return image_data_to_base64(buf.getvalue())
+
+    def _crop_shape_to_base64(self, shape, padding=10) -> str:
+        pixmap = self.canvas.pixmap
+        if pixmap is None or pixmap.isNull():
+            return ''
+        points = shape.points()
+        xs = [p.x() for p in points]
+        ys = [p.y() for p in points]
+        x1 = max(0, min(xs) - padding)
+        y1 = max(0, min(ys) - padding)
+        x2 = min(pixmap.width(), max(xs) + padding)
+        y2 = min(pixmap.height(), max(ys) + padding)
+        if x2 <= x1 or y2 <= y1:
+            return ''
+        rect = QRectF(x1, y1, x2 - x1, y2 - y1).toRect()
+        cropped = pixmap.copy(rect)
+        buf = io.BytesIO()
+        cropped.save(buf, "JPEG", quality=85)
+        return image_data_to_base64(buf.getvalue())
+
+    def _show_llm_result(self, title, result):
+        dlg = QDialog(self)
+        dlg.setWindowTitle(title)
+        dlg.setMinimumSize(480, 320)
+        dlg.resize(600, 400)
+        dlg.setStyleSheet("""
+            QDialog { background: #2b2b2b; }
+            QTextEdit { background: #1e1e1e; color: #ddd; font-size: 14px; padding: 12px; border: 1px solid #444; border-radius: 6px; }
+            QPushButton { background: #4a9eff; color: #fff; border: none; border-radius: 6px; padding: 8px 24px; font-size: 14px; }
+            QPushButton:hover { background: #3a8eef; }
+        """)
+        layout = QVBoxLayout(dlg)
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(result)
+        layout.addWidget(text)
+        btn = QPushButton(u"关闭")
+        btn.clicked.connect(dlg.accept)
+        layout.addWidget(btn, alignment=Qt.AlignCenter)
+        dlg.exec_()
+
+    def llm_suggest_annotations(self):
+        if self.canvas.pixmap is None:
+            QMessageBox.warning(self, u"提示", u"请先打开图像")
+            return
+        try:
+            self.statusBar().showMessage(u"正在请求大模型...")
+            QApplication.processEvents()
+            provider = os.getenv("LLM_PROVIDER", "ollama")
+            client = init_llm(provider=provider)
+            full_b64 = self._current_pixmap_to_base64()
+            sys_prompt = load_sys_prompt("label_suggestion")
+            msgs = make_multimodal_message(sys_prompt, u"请分析当前图像的标注情况，给出建议。", [full_b64])
+            result = client.invoke(msgs)
+            self.statusBar().showMessage(u"大模型分析完成")
+            self._show_llm_result(u"大模型标注建议", result)
+        except Exception as e:
+            self.statusBar().showMessage(u"大模型调用失败")
+            QMessageBox.warning(self, u"错误", u"大模型调用失败: %s" % str(e))
+
+    def llm_validate_selected_shape(self):
+        shape = self.canvas.selected_shape
+        if shape is None:
+            QMessageBox.warning(self, u"提示", u"请先选择一个目标框")
+            return
+        try:
+            self.statusBar().showMessage(u"正在请求大模型校验...")
+            QApplication.processEvents()
+            provider = os.getenv("LLM_PROVIDER", "ollama")
+            client = init_llm(provider=provider)
+            full_b64 = self._current_pixmap_to_base64()
+            crop_b64 = self._crop_shape_to_base64(shape)
+            label = shape.label
+            label_cn = get_label_cn(label)
+            sys_prompt = load_sys_prompt("shape_validation")
+            user_text = u"当前目标框类别: %s (%s)，请校验该标注是否正确。" % (label, label_cn)
+            msgs = make_multimodal_message(sys_prompt, user_text, [full_b64, crop_b64])
+            result = client.invoke(msgs)
+            self.statusBar().showMessage(u"大模型校验完成")
+            self._show_llm_result(u"框体大模型校验 - %s" % label, result)
+        except Exception as e:
+            self.statusBar().showMessage(u"大模型校验失败")
+            QMessageBox.warning(self, u"错误", u"大模型校验失败: %s" % str(e))
 
     def pre_annotate(self):
         models_conf = os.path.join(os.path.dirname(__file__), "data", "pre_label_models.conf")

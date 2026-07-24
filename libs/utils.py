@@ -16,6 +16,10 @@ except ImportError:
 
 
 def new_icon(icon):
+    import os
+    path = os.path.join(os.path.dirname(__file__), '..', 'resources', 'icons', icon + '.png')
+    if os.path.exists(path):
+        return QIcon(path)
     return QIcon(':/' + icon)
 
 
